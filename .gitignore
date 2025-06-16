@@ -1,0 +1,11 @@
+data/
+temp/
+env/
+wandb/
+*.png
+*.env
+*.pth
+*.pem
+.venv
+__pycache__/
+*.egg-info
