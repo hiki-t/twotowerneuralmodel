@@ -9,11 +9,10 @@ batch_size_for_sampling_negs = 500
 # main dataset
 raw_train = pd.read_parquet("data/train-00000-of-00001.parquet")
 raw_test = pd.read_parquet("data/test-00000-of-00001.parquet")
+raw_valid = pd.read_parquet("data/validation-00000-of-00001.parquet")
 
 # combine and unfold
-raw_train["test"] = False
-raw_test["test"] = True
-raw_ds = pd.concat([raw_train, raw_test], ignore_index=True)[["query_id","query","passages","test"]]
+raw_ds = pd.concat([raw_train, raw_test, raw_valid], ignore_index=True)[["query_id","query","passages"]]
 
 #  inflate the dataset
 ds_long = raw_ds.drop(columns = 'passages').join(pd.json_normalize(raw_ds["passages"])).explode(column = ['is_selected', 'passage_text', 'url'])
@@ -42,7 +41,7 @@ uni_passages.to_parquet('temp/passages.parquet.gzip',
               compression='gzip')
 uni_queries.to_parquet('temp/queries.parquet.gzip',
               compression='gzip')
-ds_long[['q_id','pos','neg','test']].to_parquet('temp/triplets.parquet.gzip',
+ds_long[['q_id','pos','neg']].to_parquet('temp/triplets.parquet.gzip',
               compression='gzip') 
 
 
