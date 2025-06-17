@@ -1,14 +1,10 @@
 import pandas as pd
 import numpy as np
-import random
-
-# import torch
-# import os
-# from datetime import datetime
-# import json
 
 random.seed(12345)
 np.random.seed(67890)
+batch_size_for_sampling_negs = 500
+
 
 # main dataset
 raw_train = pd.read_parquet("data/train-00000-of-00001.parquet")
@@ -17,49 +13,36 @@ raw_test = pd.read_parquet("data/test-00000-of-00001.parquet")
 # combine and unfold
 raw_train["test"] = False
 raw_test["test"] = True
-raw_ds = pd.concat((raw_train, raw_test))[["query_id","query","passages","test"]]
+raw_ds = pd.concat([raw_train, raw_test], ignore_index=True)[["query_id","query","passages","test"]]
 
-# count passages and inflate the dataset
-maxlen = max(raw_ds['passages'].apply(lambda x: len(x.get("is_selected"))))
+#  inflate the dataset
+ds_long = raw_ds.drop(columns = 'passages').join(pd.json_normalize(raw_ds["passages"])).explode(column = ['is_selected', 'passage_text', 'url'])
+ 
+# create a table with passages
+ds_long['pass_id'] = ds_long.groupby(['passage_text','url'], sort=False).ngroup()
+uni_passages = ds_long.drop_duplicates(['pass_id','passage_text','url'])[['pass_id','passage_text','url']]
 
-for i in range(maxlen):
-    raw_ds[f'is_selected{i}'] = np.nan
-    raw_ds[f'passage_text{i}'] = np.nan
-    raw_ds[f'url{i}'] = np.nan
-
-for j, r in raw_ds.iterrows():
-    i = 0
-    p = r['passages']
-    for s, t, u in zip(p.get("is_selected"), p.get("passage_text"), p.get("url")):
-      raw_ds.loc[j, f'is_selected{i}'] = s
-      raw_ds.loc[j, f'passage_text{i}'] = t
-      raw_ds.loc[j, f'url{i}'] = u 
-      i += 1 
-    
-ds_long = pd.wide_to_long(
-    raw_ds.drop(columns = "passages"),
-    stubnames = ["is_selected", "passage_text","url"],
-    i = "query_id",
-    j = "pass_qid"
-    ).reset_index().dropna()
-
-
-uni_passages = ds_long.drop_duplicates(['passage_text','url'])[['passage_text','url']]
-uni_passages = uni_passages.reset_index(drop=True).rename_axis(['pass_id']).reset_index()
-# save the dictionary
-uni_passages.to_parquet('temp/passages.parquet.gzip',
-              compression='gzip')
-
-ds_long_2 = pd.merge(ds_long, uni_passages, on = ['passage_text','url'])
+# create a table with queries
+ds_long['q_id'] = ds_long.groupby(['query_id'], sort=False).ngroup()
+uni_queries = ds_long.drop_duplicates(['q_id','query_id','query'])[['q_id','query_id','query']]
 
 ## make a triplet -- randomly pick a comparison passage
-ds_long_2['pos'] = ds_long_2['pass_id']
-ds_long_2['neg'] = ds_long_2.groupby(by='query_id')['pass_id'].transform(
-    lambda vec: random.sample(sorted(set(uni_passages['pass_id']).difference(set(vec))), len(vec))
-    )
+all_pass_ids = uni_passages['pass_id'].unique()
+def sample_negatives(group):
+    pos_ids = group['pass_id'].unique()
+    available_neg = np.setdiff1d(all_pass_ids, pos_ids, assume_unique=True)
+    return pd.Series(np.random.choice(available_neg, size=len(group), replace=False), index=group.index)
 
-## save the master dataset
-ds_long_2[['query_id','query','pos','neg','test']].to_parquet('temp/master.parquet.gzip',
+ds_long['pos'] = ds_long['pass_id']
+ds_long['batch'] = ds_long['q_id'] // batch_size_for_sampling_negs
+ds_long['neg'] = ds_long.groupby('batch', group_keys=False).apply(sample_negatives)
+
+# save datasets
+uni_passages.to_parquet('temp/passages.parquet.gzip',
+              compression='gzip')
+uni_queries.to_parquet('temp/queries.parquet.gzip',
+              compression='gzip')
+ds_long[['q_id','pos','neg','test']].to_parquet('temp/triplets.parquet.gzip',
               compression='gzip') 
 
 
