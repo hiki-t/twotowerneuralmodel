@@ -14,8 +14,8 @@ tri = torch.load('temp/tri_tensor.pt')
 
 ## train test split 
 sel  = torch.rand(len(tri))
-train_dataset = tri[sel<=0.95]
-test_dataset = tri[sel>0.95]
+train_dataset = tri[sel<=0.99]
+test_dataset = tri[sel>0.99]
 
 # model
 class TTSearch0(nn.Module):
@@ -105,7 +105,7 @@ config = dict(
 model, train_loader, criterion, optimizer = make(config) 
 print(model) 
 train(model, train_loader, criterion, optimizer, config)
-test(model, test_dataset[:2000]) 
+test(model, test_dataset[:2500]) 
  
 
 
