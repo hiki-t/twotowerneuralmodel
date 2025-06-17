@@ -6,8 +6,8 @@ import pandas as pd
 
 ### Step1. load datasets
 def load_pd_df_data(v_num=0):
-    ds_ver = dataset_versions[v_num]
     dataset_versions = ['v1.1', 'v2.1']
+    ds_ver = dataset_versions[v_num]
     dataset = load_dataset("microsoft/ms_marco", ds_ver)
     train_ds = dataset["train"]
     passages = train_ds["passages"]
