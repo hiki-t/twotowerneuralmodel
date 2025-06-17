@@ -38,7 +38,13 @@ def make(config):
     model = TTSearch0(config['emb_dim'], config['hidden_dim']).to(config['device'])
 
     # Make the loss and optimizer
-    criterion = nn.TripletMarginLoss(margin = config['margin'], swap=True)
+    criterion = nn.TripletMarginWithDistanceLoss(
+        margin = config['margin'],
+        distance_function=lambda x, y: 1.0 - cosine_similarity(x, y)
+        )
+    
+    
+    nn.TripletMarginLoss(margin = config['margin'])
     optimizer = torch.optim.Adam(model.parameters(), lr=config['learning_rate'])
     
     return model, train_loader, criterion, optimizer
@@ -59,7 +65,8 @@ def train(model, train_loader, criterion, optimizer, config):
             optimizer.step()
             losses.append(loss)
         mean_loss = torch.stack(losses).mean()
-        print(f'Epoch {epoch+1}, Loss: {mean_loss.item():.4f}')
+        print(f'Epoch {epoch+1}, Loss: {mean_loss.item():.4f}') 
+ 
 
 def test(model, test_data):
     model.eval() 
@@ -80,11 +87,11 @@ def test(model, test_data):
 
     ave_cossim = torch.cat([v.reshape(1) for v in cossims_this]).mean()
     ave_propbelow = torch.cat([v.reshape(1) for v in propbelow_this]).mean() 
-    print(f'Average cosine similarity between the query and its true positive: {ave_cossim:.4f}') 
-    print(f'Average share of documents with lower similarity to the query than the true positive: {ave_propbelow:.4f}') 
+    print(f'Average cosine similarity among positives: {ave_cossim:.4f}') 
+    print(f'Average share of documents with lower similarity: {ave_propbelow:.4f}') 
 
 config = dict(
-    num_epochs=10,
+    num_epochs=20,
     batch_size=64,
     learning_rate=0.05,
     emb_dim = 25,
@@ -98,7 +105,7 @@ config = dict(
 model, train_loader, criterion, optimizer = make(config) 
 print(model) 
 train(model, train_loader, criterion, optimizer, config)
-test(model, test_dataset[:2500]) 
+test(model, test_dataset[:2000]) 
  
 
 
